@@ -1,18 +1,8 @@
 FROM rabbitmq:management
-
-COPY rabbitmq.config /etc/rabbitmq/rabbitmq.config
-RUN chmod 777 /etc/rabbitmq/rabbitmq.config
-
-ENV RABBITMQ_SETUP_DELAY=10
-ENV RABBITMQ_USER user
-ENV RABBITMQ_PASSWORD user
-ENV RABBITMQ_CLUSTER_NODES=
-ENV RABBITMQ_FIREHOSE_QUEUENAME=
-ENV RABBITMQ_FIREHOSE_ROUTINGKEY=publish.#
-
-RUN apt-get update -y && apt-get install -y python
-
-ADD init.sh /init.sh
-EXPOSE 15672
-
-CMD ["/init.sh"]
+ADD plugins/autocluster-0.7.0.ez \
+/usr/lib/rabbitmq/lib/rabbitmq_server-$RABBITMQ_VERSION/plugins/
+ADD plugins/autocluster_aws-0.0.1.ez \
+/usr/lib/rabbitmq/lib/rabbitmq_server-$RABBITMQ_VERSION/plugins/
+ADD plugins/rabbitmq_aws-0.7.0.ez \
+/usr/lib/rabbitmq/lib/rabbitmq_server-$RABBITMQ_VERSION/plugins/
+RUN rabbitmq-plugins enable --offline autocluster
