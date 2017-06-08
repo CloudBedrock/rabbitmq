@@ -154,9 +154,9 @@ ID                           HOSTNAME  STATUS  AVAILABILITY  MANAGER
 au00yheo9dvstjwvk3lo4l2oe *  SERVER1    Ready   Active        Reachable
 c7n1elqonzsidncwlyg62d90v    SERVER2    Ready   Active        Leader
 
-$ docker node update -label-add rabbitmq=1 au00yheo9dvstjwvk3lo4l2oe
-$ docker node update -label-add rabbitmq=2 920kij34jhrz76lprdthz2utz
-$ docker node update -label-add rabbitmq=3 6so183185g8qd11aoix21rea1
+$ docker node update --label-add rabbitmq-1=on au00yheo9dvstjwvk3lo4l2oe
+$ docker node update --label-add rabbitmq-2=on 920kij34jhrz76lprdthz2utz
+$ docker node update --label-add rabbitmq-3=on 6so183185g8qd11aoix21rea1
 ```
 
 It is possible to see that label has been correctly set by invoking following
@@ -176,50 +176,49 @@ we can revisit service creation instructions for e.g. 3-noded RabbitMQ cluster:
 
 ```{.bash}
 $ docker service create \
-    -name rabbit-1 \
-    -network net \
-    -e RABBITMQ_SETUP_DELAY=120 \
+    --name rabbit-1 \
+    --network net \
+    --constraint node.labels.rabbitmq-1==on \
+    --mount type=bind,source=/data/rabbitmq-1,target=/var/lib/rabbitmq \
+    -e RABBITMQ_SETUP_DELAY=15 \
     -e RABBITMQ_USER=admin \
     -e RABBITMQ_PASSWORD=adminpwd \
-    -e RABBITMQ_CLUSTER_NODES='rabbit@rabbit-2 rabbit@rabbit' \
-    -constraint node.labels.rabbitmq==1 \
-    -mount type=bind,source=/data/rabbitmq-1,target=/var/lib/rabbitmq \
+    -e RABBITMQ_CLUSTER_NODES='rabbit@rabbit-2 rabbit@rabbit-3' \
     -e RABBITMQ_NODENAME=rabbit@rabbit-1 \
     -e RABBITMQ_ERLANG_COOKIE=a-little-secret \
     -e RABBITMQ_FIREHOSE_QUEUENAME=trace \
     -e RABBITMQ_FIREHOSE_ROUTINGKEY=publish.# \
-    kuznero/rabbitmq:3.6.6-cluster
+    kuznero/rabbitmq:management-cluster
 
 $ docker service create \
-    -name rabbit-2 \
-    -network net \
-    -e RABBITMQ_SETUP_DELAY=60 \
+    --name rabbit-2 \
+    --network net \
+    --constraint node.labels.rabbitmq-2==on \
+    --mount type=bind,source=/data/rabbitmq-2,target=/var/lib/rabbitmq \
+    -e RABBITMQ_SETUP_DELAY=10 \
     -e RABBITMQ_USER=admin \
     -e RABBITMQ_PASSWORD=adminpwd \
-    -e RABBITMQ_CLUSTER_NODES='rabbit@rabbit-1 rabbit@rabbit' \
-    -constraint node.labels.rabbitmq==2 \
-    -mount type=bind,source=/data/rabbitmq-2,target=/var/lib/rabbitmq \
+    -e RABBITMQ_CLUSTER_NODES='rabbit@rabbit-1 rabbit@rabbit-3' \
     -e RABBITMQ_NODENAME=rabbit@rabbit-2 \
     -e RABBITMQ_ERLANG_COOKIE=a-little-secret \
     -e RABBITMQ_FIREHOSE_QUEUENAME=trace \
     -e RABBITMQ_FIREHOSE_ROUTINGKEY=publish.# \
-    kuznero/rabbitmq:3.6.6-cluster
+    kuznero/rabbitmq:management-cluster
 
 $ docker service create \
-    -name rabbit \
-    -network net \
-    -p #{HTTP_UI_PORT}:15672 \
-    -e RABBITMQ_SETUP_DELAY=20 \
+    --name rabbit-3 \
+    --network net \
+    --constraint node.labels.rabbitmq-3==on \
+    --mount type=bind,source=/data/rabbitmq-3,target=/var/lib/rabbitmq \
+    -e RABBITMQ_SETUP_DELAY=5 \
     -e RABBITMQ_USER=admin \
     -e RABBITMQ_PASSWORD=adminpwd \
     -e RABBITMQ_CLUSTER_NODES='rabbit@rabbit-1 rabbit@rabbit-2' \
-    -constraint node.labels.rabbitmq==3 \
-    -mount type=bind,source=/data/rabbitmq-3,target=/var/lib/rabbitmq \
-    -e RABBITMQ_NODENAME=rabbit@rabbit \
+    -e RABBITMQ_NODENAME=rabbit@rabbit-3 \
     -e RABBITMQ_ERLANG_COOKIE=a-little-secret \
     -e RABBITMQ_FIREHOSE_QUEUENAME=trace \
     -e RABBITMQ_FIREHOSE_ROUTINGKEY=publish.# \
-    kuznero/rabbitmq:3.6.6-cluster
+    kuznero/rabbitmq:management-cluster
 ```
 
 > This will start 3 different services (single replica services).
@@ -231,3 +230,9 @@ enforces some limitations onto how it is possible to perform upgrades.
 The only option for RabbitMQ cluster upgrade is during non-working hours when
 there is no activity such that it is possible to bring whole cluster down and
 upgrade it.
+
+## Testing
+
+> For testing purposes there are `start.sh` and `stop.sh` scripts included under
+> `./scripts` folder that is possible to use for running small 3-noded RabbitMQ
+> cluster on a local (possible single noded) docker swarm cluster.
