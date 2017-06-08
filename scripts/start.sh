@@ -8,7 +8,7 @@ ERLANG_SECRET=secret
 TRACE_QUEUE=trace
 PORT=5672
 MGMT_PORT=15672
-DELAY=5
+DELAY=30
 
 docker network create -d overlay $NET_NAME
 
@@ -56,3 +56,7 @@ docker service create \
   -e RABBITMQ_FIREHOSE_QUEUENAME=$TRACE_QUEUE \
   -e RABBITMQ_FIREHOSE_ROUTINGKEY=publish.# \
   kuznero/rabbitmq:management-cluster
+
+echo -n "Waiting for nodes to establish cluster ... "
+sleep $(($DELAY*3))
+echo "done."
