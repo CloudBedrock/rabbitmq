@@ -3,7 +3,7 @@ FROM rabbitmq:management
 COPY rabbitmq.config /etc/rabbitmq/rabbitmq.config
 RUN chmod 777 /etc/rabbitmq/rabbitmq.config
 
-ENV RABBITMQ_SETUP_DELAY=10
+ENV RABBITMQ_SETUP_DELAY=0
 ENV RABBITMQ_USER user
 ENV RABBITMQ_PASSWORD user
 ENV RABBITMQ_CLUSTER_NODES=

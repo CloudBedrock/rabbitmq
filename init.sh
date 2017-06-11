@@ -14,10 +14,17 @@
   IFS=' '; read -ra xs <<< "$RABBITMQ_CLUSTER_NODES"
   for i in "${xs[@]}"; do
     echo "<< Joining cluster with [$i] ... >>"
-    rabbitmqctl join_cluster "$i"
+    rc="1"
+    while [ $rc -ne 0 ]; do
+      rabbitmqctl join_cluster "$i"
+      rc="$?"
+    done
     echo "<< Joining cluster with [$i] DONE >>"
   done
   rabbitmqctl start_app
+  echo "<< Cluster status ... >>"
+  rabbitmqctl cluster_status
+  echo "<< Cluster status >>"
 
   rabbitmqctl add_user $RABBITMQ_USER $RABBITMQ_PASSWORD 2>/dev/null
   rabbitmqctl set_user_tags $RABBITMQ_USER administrator management
