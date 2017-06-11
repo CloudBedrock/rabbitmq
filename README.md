@@ -68,7 +68,7 @@ important bit to it - cluster recovery mode:
 [
  {rabbit,
   [
-   {cluster_partition_handling, autoheal}
+   {cluster_partition_handling, pause_minority}
   ]}
 ].
 ```
