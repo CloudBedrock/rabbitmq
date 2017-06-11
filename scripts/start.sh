@@ -8,7 +8,7 @@ ERLANG_SECRET=secret
 TRACE_QUEUE=trace
 PORT=5672
 MGMT_PORT=15672
-DELAY=10
+DELAY=0
 
 n=$(docker network ls --filter name=$NET_NAME | grep -v '^NETWORK' | wc -l)
 if [[ $n -eq 0 ]]; then
@@ -25,7 +25,6 @@ if [[ $n -eq 0 ]]; then
     -e RABBITMQ_SETUP_DELAY=$(($DELAY*3)) \
     -e RABBITMQ_USER=$USER_NAME \
     -e RABBITMQ_PASSWORD=$PASSWORD \
-    -e RABBITMQ_CLUSTER_NODES="rabbit@$SVC_NAME-2 rabbit@$SVC_NAME-3" \
     -e RABBITMQ_NODENAME="rabbit@$SVC_NAME-1" \
     -e RABBITMQ_ERLANG_COOKIE=$ERLANG_SECRET \
     -e RABBITMQ_FIREHOSE_QUEUENAME=$TRACE_QUEUE \
@@ -43,7 +42,7 @@ if [[ $n -eq 0 ]]; then
     -e RABBITMQ_SETUP_DELAY=$(($DELAY*2)) \
     -e RABBITMQ_USER=$USER_NAME \
     -e RABBITMQ_PASSWORD=$PASSWORD \
-    -e RABBITMQ_CLUSTER_NODES="rabbit@$SVC_NAME-1 rabbit@$SVC_NAME-3" \
+    -e RABBITMQ_CLUSTER_NODES="rabbit@$SVC_NAME-1" \
     -e RABBITMQ_NODENAME="rabbit@$SVC_NAME-2" \
     -e RABBITMQ_ERLANG_COOKIE=$ERLANG_SECRET \
     -e RABBITMQ_FIREHOSE_QUEUENAME=$TRACE_QUEUE \

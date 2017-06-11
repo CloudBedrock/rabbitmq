@@ -10,16 +10,16 @@
 
   sleep $RABBITMQ_SETUP_DELAY
 
-  rabbitmqctl stop_app
   IFS=' '; read -ra xs <<< "$RABBITMQ_CLUSTER_NODES"
   for i in "${xs[@]}"; do
-    echo "<< Joining cluster with [$i] ... >>"
     rc="1"
     while [ $rc -ne 0 ]; do
+      echo "<< Joining cluster with [$i] ... >>"
+      rabbitmqctl stop_app
       rabbitmqctl join_cluster "$i"
       rc="$?"
+      echo "<< Joining cluster with [$i] DONE >>"
     done
-    echo "<< Joining cluster with [$i] DONE >>"
   done
   rabbitmqctl start_app
   echo "<< Cluster status ... >>"
