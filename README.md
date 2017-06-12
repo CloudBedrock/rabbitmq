@@ -31,6 +31,9 @@ here:
 
 * `RABBITMQ_USER` - new user name
 * `RABBITMQ_PASSWORD` - password for new user
+* `RABBITMQ_LOOPBACK_USERS` - a space delimited list of users considered to be
+  loopback users (users that are allowed to connect to RabbitMQ only through
+  `localhost` address).
 * `RABBITMQ_CLUSTER_NODES` - a space delimited list of RabbitMQ
   nodes that it needs to connect to (`join_cluster`), e.g.
   `"rabbit@rabbit-1 rabbit@rabbit-2 rabbit@rabbit-3"`.
@@ -58,6 +61,7 @@ RUN chmod 777 /etc/rabbitmq/rabbitmq.config
 ENV RABBITMQ_SETUP_DELAY=5
 ENV RABBITMQ_USER=guest
 ENV RABBITMQ_PASSWORD=guest
+ENV RABBITMQ_LOOPBACK_USERS=guest
 ENV RABBITMQ_CLUSTER_NODES=
 ENV RABBITMQ_CLUSTER_PARTITION_HANDLING=autoheal
 ENV RABBITMQ_CLUSTER_DISC_RAM=disc
@@ -90,6 +94,7 @@ important bits:
    {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
    {default_user_tags, [administrator, management]},
    {hipe_compile, [[HIPE_COMPILE]]},
+   {loopback_users, [[[LOOPBACK_USERS]]]},
    {mnesia_table_loading_retry_limit, 10},
    {mnesia_table_loading_retry_timeout, 30000}
    % {log_levels, [{connection, channel, federation, mirroring, debug}]}
@@ -111,6 +116,7 @@ part of our image):
 echo "RABBITMQ_SETUP_DELAY                = ${RABBITMQ_SETUP_DELAY:=5}"
 echo "RABBITMQ_USER                       = ${RABBITMQ_USER:=guest}"
 echo "RABBITMQ_PASSWORD                   = ${RABBITMQ_PASSWORD:=guest}"
+echo "RABBITMQ_LOOPBACK_USERS             = ${RABBITMQ_LOOPBACK_USERS:=guest}"
 echo "RABBITMQ_CLUSTER_NODES              = $RABBITMQ_CLUSTER_NODES"
 echo "RABBITMQ_CLUSTER_PARTITION_HANDLING = ${RABBITMQ_CLUSTER_PARTITION_HANDLING:=autoheal}"
 echo "RABBITMQ_CLUSTER_DISC_RAM           = ${RABBITMQ_CLUSTER_DISC_RAM:=disc}"
@@ -128,12 +134,20 @@ for node in "${nodes[@]}"; do
 done
 nodes_list=${nodes_list:2}
 
+lbusers_list=""
+IFS=' '; read -ra lbusers <<< "$RABBITMQ_LOOPBACK_USERS"
+for lbuser in "${lbusers[@]}"; do
+  lbusers_list="$lbusers_list, <<\"$lbuser\">>"
+done
+lbusers_list=${lbusers_list:2}
+
 sed -i "s/\[\[CLUSTER_PARTITION_HANDLING\]\]/$RABBITMQ_CLUSTER_PARTITION_HANDLING/" $CONFIG
 sed -i "s/\[\[CLUSTER_NODES\]\]/$nodes_list/" $CONFIG
 sed -i "s/\[\[CLUSTER_DISC_RAM\]\]/$RABBITMQ_CLUSTER_DISC_RAM/" $CONFIG
 sed -i "s/\[\[HIPE_COMPILE\]\]/$RABBITMQ_HIPE_COMPILE/" $CONFIG
 sed -i "s/\[\[USER\]\]/$RABBITMQ_USER/" $CONFIG
 sed -i "s/\[\[PASSWORD\]\]/$RABBITMQ_PASSWORD/" $CONFIG
+sed -i "s/\[\[LOOPBACK_USERS\]\]/$lbusers_list/" $CONFIG
 
 echo "<< RabbitMQ.config ... >>>"
 cat $CONFIG
@@ -165,6 +179,8 @@ echo "<< RabbitMQ.config >>>"
 > `RABBITMQ_SETUP_DELAY` (in seconds) is used here to make sure setup process
 > starts when RabbitMQ server had started (typically a small value, like 5
 > seconds).
+
+> The default value of loopback users is `guest`.
 
 ## Configuring persistence layer
 
