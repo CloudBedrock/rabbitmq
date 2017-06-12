@@ -1,37 +1,31 @@
 #!/usr/bin/env bash
 
-(
-  echo "RABBITMQ_SETUP_DELAY          = $RABBITMQ_SETUP_DELAY"
-  echo "RABBITMQ_USER                 = $RABBITMQ_USER"
-  echo "RABBITMQ_PASSWORD             = $RABBITMQ_PASSWORD"
-  echo "RABBITMQ_CLUSTER_NODES        = $RABBITMQ_CLUSTER_NODES"
-  echo "RABBITMQ_FIREHOSE_QUEUENAME   = $RABBITMQ_FIREHOSE_QUEUENAME"
-  echo "RABBITMQ_FIREHOSE_ROUTINGKEY  = $RABBITMQ_FIREHOSE_ROUTINGKEY"
+echo "RABBITMQ_SETUP_DELAY                = $RABBITMQ_SETUP_DELAY"
+echo "RABBITMQ_USER                       = $RABBITMQ_USER"
+echo "RABBITMQ_PASSWORD                   = $RABBITMQ_PASSWORD"
+echo "RABBITMQ_CLUSTER_NODES              = $RABBITMQ_CLUSTER_NODES"
+echo "RABBITMQ_CLUSTER_PARTITION_HANDLING = $RABBITMQ_CLUSTER_PARTITION_HANDLING"
+echo "RABBITMQ_CLUSTER_DISC_RAM           = $RABBITMQ_CLUSTER_DISC_RAM"
+echo "RABBITMQ_FIREHOSE_QUEUENAME         = $RABBITMQ_FIREHOSE_QUEUENAME"
+echo "RABBITMQ_FIREHOSE_ROUTINGKEY        = $RABBITMQ_FIREHOSE_ROUTINGKEY"
 
+nodes_list=""
+IFS=' '; read -ra nodes <<< "$RABBITMQ_CLUSTER_NODES"
+for node in "${nodes[@]}"; do
+  nodes_list=", '$node'"
+done
+nodes_list=${nodes_list:2}
+
+sed -i "s/[[CLUSTER_PARTITION_HANDLING]]/$RABBITMQ_CLUSTER_PARTITION_HANDLING/" /etc/rabbitmq/rabbitmq.config
+sed -i "s/[[CLUSTER_NODES]]/$nodes_list/" /etc/rabbitmq/rabbitmq.config
+sed -i "s/[[CLUSTER_DISC_RAM]]/$RABBITMQ_CLUSTER_DISC_RAM/" /etc/rabbitmq/rabbitmq.config
+sed -i "s/[[USER]]/$RABBITMQ_USER/" /etc/rabbitmq/rabbitmq.config
+sed -i "s/[[PASSWORD]]/$RABBITMQ_PASSWORD/" /etc/rabbitmq/rabbitmq.config
+
+(
   sleep $RABBITMQ_SETUP_DELAY
 
-  IFS=' '; read -ra xs <<< "$RABBITMQ_CLUSTER_NODES"
-  for i in "${xs[@]}"; do
-    rc="1"
-    while [ $rc -ne 0 ]; do
-      echo "<< Joining cluster with [$i] ... >>"
-      rabbitmqctl stop_app
-      rabbitmqctl join_cluster "$i"
-      rc="$?"
-      echo "<< Joining cluster with [$i] DONE >>"
-    done
-  done
-  rabbitmqctl start_app
-  echo "<< Cluster status ... >>"
-  rabbitmqctl cluster_status
-  echo "<< Cluster status >>"
-
-  rabbitmqctl add_user $RABBITMQ_USER $RABBITMQ_PASSWORD 2>/dev/null
-  rabbitmqctl set_user_tags $RABBITMQ_USER administrator management
-  rabbitmqctl set_permissions -p / $RABBITMQ_USER  ".*" ".*" ".*"
   rabbitmqctl set_policy SyncQs '.*' '{"ha-mode":"all","ha-sync-mode":"automatic"}' --priority 0 --apply-to queues
-
-  echo "*** User '$RABBITMQ_USER' with password '$RABBITMQ_PASSWORD' completed. ***"
 
   if [[ "$RABBITMQ_FIREHOSE_QUEUENAME" != "" ]]; then
     echo "<< Enabling Firehose ... >>>"
