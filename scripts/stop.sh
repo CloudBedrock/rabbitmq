@@ -46,27 +46,31 @@ function prompt_to_proceed_no () {
   fi
 }
 
-n=$(docker service ls --filter name=$SVC_NAME-1 | grep -v '^ID' | wc -l)
-if [[ $n -gt 0 ]]; then
-  docker service rm "$SVC_NAME-1"
-fi
-
-n=$(docker service ls --filter name=$SVC_NAME-2 | grep -v '^ID' | wc -l)
-if [[ $n -gt 0 ]]; then
-  docker service rm "$SVC_NAME-2"
-fi
-
-n=$(docker service ls --filter name=$SVC_NAME-3 | grep -v '^ID' | wc -l)
-if [[ $n -gt 0 ]]; then
-  docker service rm "$SVC_NAME-3"
-fi
-
-n=$(docker network ls --filter name=$NET_NAME | grep -v '^NETWORK' | wc -l)
-if [[ $n -gt 0 ]]; then
-  docker network rm $NET_NAME
+prompt_to_proceed_yes "Remove all node services"
+if [ "$ans" == "yes" ]; then
+  n=$(docker service ls --filter name=$SVC_NAME-1 | grep -v '^ID' | wc -l)
+  if [[ $n -gt 0 ]]; then
+    docker service rm "$SVC_NAME-1"
+  fi
+  n=$(docker service ls --filter name=$SVC_NAME-2 | grep -v '^ID' | wc -l)
+  if [[ $n -gt 0 ]]; then
+    docker service rm "$SVC_NAME-2"
+  fi
+  n=$(docker service ls --filter name=$SVC_NAME-3 | grep -v '^ID' | wc -l)
+  if [[ $n -gt 0 ]]; then
+    docker service rm "$SVC_NAME-3"
+  fi
 fi
 
 prompt_to_proceed_yes "Prune unused volumes"
 if [ "$ans" == "yes" ]; then
   docker volume prune -f
+fi
+
+prompt_to_proceed_yes "Remove network"
+if [ "$ans" == "yes" ]; then
+  n=$(docker network ls --filter name=$NET_NAME | grep -v '^NETWORK' | wc -l)
+  if [[ $n -gt 0 ]]; then
+    docker network rm $NET_NAME
+  fi
 fi
