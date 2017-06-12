@@ -1,5 +1,10 @@
 # RabbitMQ cluster
 
+## Available images
+
+* `kuznero/rabbitmq:3.6.10-mancluster` - following official
+  `rabbitmq:3.6.10-management`.
+
 ## Setting up RabbitMQ cluster in Docker Swarm (Mode)
 
 Official [clustering guidelines](https://www.rabbitmq.com/clustering.html)
@@ -29,6 +34,11 @@ here:
 * `RABBITMQ_CLUSTER_NODES` - a space delimited list of RabbitMQ
   nodes that it needs to connect to (`join_cluster`), e.g.
   `"rabbit@rabbit-1 rabbit@rabbit-2 rabbit@rabbit-3"`.
+* `RABBITMQ_CLUSTER_PARTITION_HANDLING` can be one of `ignore`, `pause_minority`
+  or `autoheal`.
+* `RABBITMQ_CLUSTER_DISC_RAM` can be one of `disc` or `ram`.
+* `RABBITMQ_HIPE_COMPILE` can be either `false` or `true`.
+* `RABBITMQ_NODENAME` should have a value in the form `rabbit@short-host-name`.
 * `RABBITMQ_FIREHOSE_QUEUENAME` - queue name for
   **Firehose** tracing (if it is left blank **Firehose** will not be
   enabled)
@@ -40,17 +50,21 @@ here:
 Here is how we will do this (`Dockerfile`):
 
 ```{.Dockerfile}
-FROM rabbitmq:management
+FROM rabbitmq:3.6.10-management
 
 COPY rabbitmq.config /etc/rabbitmq/rabbitmq.config
 RUN chmod 777 /etc/rabbitmq/rabbitmq.config
 
-ENV RABBITMQ_SETUP_DELAY=10
-ENV RABBITMQ_USER user
-ENV RABBITMQ_PASSWORD user
+ENV RABBITMQ_SETUP_DELAY=5
+ENV RABBITMQ_USER=guest
+ENV RABBITMQ_PASSWORD=guest
 ENV RABBITMQ_CLUSTER_NODES=
+ENV RABBITMQ_CLUSTER_PARTITION_HANDLING=autoheal
+ENV RABBITMQ_CLUSTER_DISC_RAM=disc
 ENV RABBITMQ_FIREHOSE_QUEUENAME=
 ENV RABBITMQ_FIREHOSE_ROUTINGKEY=publish.#
+ENV RABBITMQ_HIPE_COMPILE=false
+ENV RABBITMQ_NODENAME=
 
 RUN apt-get update -y && apt-get install -y python
 
@@ -61,17 +75,31 @@ CMD ["/init.sh"]
 ```
 
 We are taking our own `rabbitmq.config` file that has only one
-important bit to it - cluster recovery mode:
+important bits:
 
 ```{.erlang}
 %% -*- mode: erlang -*-
 [
  {rabbit,
   [
-   {cluster_partition_handling, pause_minority}
+   {cluster_partition_handling, [[CLUSTER_PARTITION_HANDLING]]},
+   {cluster_nodes, {[[[CLUSTER_NODES]]], [[CLUSTER_DISC_RAM]]}},
+   {default_vhost, <<"/">>},
+   {default_user, <<"[[USER]]">>},
+   {default_pass, <<"[[PASSWORD]]">>},
+   {default_permissions, [<<".*">>, <<".*">>, <<".*">>]},
+   {default_user_tags, [administrator, management]},
+   {hipe_compile, [[HIPE_COMPILE]]},
+   {mnesia_table_loading_retry_limit, 10},
+   {mnesia_table_loading_retry_timeout, 30000}
+   % {log_levels, [{connection, channel, federation, mirroring, debug}]}
   ]}
 ].
 ```
+
+> Note that placeholder in the form `[[PLACEHOLDER]]` will be replaced right
+> before container starts filling respective values from environment variables
+> passed to it.
 
 And we change our entry point to our own script where we can pre-configure a lot
 of things (for that reason we needed to have `python` installed as
@@ -80,56 +108,63 @@ part of our image):
 ```{.bash}
 #!/usr/bin/env bash
 
+echo "RABBITMQ_SETUP_DELAY                = ${RABBITMQ_SETUP_DELAY:=5}"
+echo "RABBITMQ_USER                       = ${RABBITMQ_USER:=guest}"
+echo "RABBITMQ_PASSWORD                   = ${RABBITMQ_PASSWORD:=guest}"
+echo "RABBITMQ_CLUSTER_NODES              = $RABBITMQ_CLUSTER_NODES"
+echo "RABBITMQ_CLUSTER_PARTITION_HANDLING = ${RABBITMQ_CLUSTER_PARTITION_HANDLING:=autoheal}"
+echo "RABBITMQ_CLUSTER_DISC_RAM           = ${RABBITMQ_CLUSTER_DISC_RAM:=disc}"
+echo "RABBITMQ_FIREHOSE_QUEUENAME         = $RABBITMQ_FIREHOSE_QUEUENAME"
+echo "RABBITMQ_FIREHOSE_ROUTINGKEY        = $RABBITMQ_FIREHOSE_ROUTINGKEY"
+echo "RABBITMQ_HIPE_COMPILE               = ${RABBITMQ_HIPE_COMPILE:=false}"
+echo "RABBITMQ_NODENAME                   = $RABBITMQ_NODENAME"
+
+CONFIG=/etc/rabbitmq/rabbitmq.config
+
+nodes_list=""
+IFS=' '; read -ra nodes <<< "$RABBITMQ_CLUSTER_NODES"
+for node in "${nodes[@]}"; do
+  nodes_list="$nodes_list, '$node'"
+done
+nodes_list=${nodes_list:2}
+
+sed -i "s/\[\[CLUSTER_PARTITION_HANDLING\]\]/$RABBITMQ_CLUSTER_PARTITION_HANDLING/" $CONFIG
+sed -i "s/\[\[CLUSTER_NODES\]\]/$nodes_list/" $CONFIG
+sed -i "s/\[\[CLUSTER_DISC_RAM\]\]/$RABBITMQ_CLUSTER_DISC_RAM/" $CONFIG
+sed -i "s/\[\[HIPE_COMPILE\]\]/$RABBITMQ_HIPE_COMPILE/" $CONFIG
+sed -i "s/\[\[USER\]\]/$RABBITMQ_USER/" $CONFIG
+sed -i "s/\[\[PASSWORD\]\]/$RABBITMQ_PASSWORD/" $CONFIG
+
+echo "<< RabbitMQ.config ... >>>"
+cat $CONFIG
+echo "<< RabbitMQ.config >>>"
+
 (
-  sleep $RABBITMQ_SETUP_DELAY
+  sleep ${RABBITMQ_SETUP_DELAY:-5}
 
-  rabbitmqctl stop_app
-  IFS=' '; read -ra xs <<< "$RABBITMQ_CLUSTER_NODES"
-  for i in "${xs[@]}"; do
-    echo "<< Joining cluster with [$i] ... >>"
-    rabbitmqctl join_cluster "$i"
-    echo "<< Joining cluster with [$i] DONE >>"
-  done
-  rabbitmqctl start_app
-
-  rabbitmqctl add_user $RABBITMQ_USER $RABBITMQ_PASSWORD 2>/dev/null
-  rabbitmqctl set_user_tags $RABBITMQ_USER administrator management
-  rabbitmqctl set_permissions -p / $RABBITMQ_USER  ".*" ".*" ".*"
-  rabbitmqctl set_policy \
-    SyncQs \
-    '.*' \
-    '{"ha-mode":"all","ha-sync-mode":"automatic"}' \
-    --priority 0 \
-    --apply-to queues
-
-  echo "*** User '$RABBITMQ_USER' with password '$RABBITMQ_PASSWORD' completed. ***"
-  echo "*** Log in the WebUI at port 15672 (example: http:/localhost:15672) ***"
-
-  if [[ "$RABBITMQ_FIREHOSE_QUEUENAME" -ne "" ]]; then
+  rabbitmqctl set_policy SyncQs '.*' '{"ha-mode":"all","ha-sync-mode":"automatic"}' --priority 0 --apply-to queues
+  if [[ "$RABBITMQ_FIREHOSE_QUEUENAME" != "" ]]; then
     echo "<< Enabling Firehose ... >>>"
-    ln -s $(find -iname rabbitmqadmin ` head -1) /rabbitmqadmin
+    ln -s $(find -iname rabbitmqadmin | head -1) /rabbitmqadmin
     chmod +x /rabbitmqadmin
     echo -n "Declaring '$RABBITMQ_FIREHOSE_QUEUENAME' queue ... "
     ./rabbitmqadmin declare queue name=$RABBITMQ_FIREHOSE_QUEUENAME
     ./rabbitmqadmin list queues
-    echo -n "Declaring binding from 'amq.rabbitmq.trace' to '$RABBITMQ_FIREHOSE_QUEUENAME' ... "
-    ./rabbitmqadmin declare binding \
-      source=amq.rabbitmq.trace \
-      destination=$RABBITMQ_FIREHOSE_QUEUENAME \
-      routing_key=$RABBITMQ_FIREHOSE_ROUTINGKEY
+    echo -n "Declaring binding from 'amq.rabbitmq.trace' to '$RABBITMQ_FIREHOSE_QUEUENAME' with '$RABBITMQ_FIREHOSE_ROUTINGKEY' routing key ... "
+    ./rabbitmqadmin declare binding source=amq.rabbitmq.trace destination=$RABBITMQ_FIREHOSE_QUEUENAME routing_key=$RABBITMQ_FIREHOSE_ROUTINGKEY
     ./rabbitmqadmin list bindings
     rabbitmqctl trace_on
     echo "<< Enabling Firehose ... DONE >>>"
   fi
-
 ) & rabbitmq-server $@
 ```
 
 > Notice that by default we create `SyncQs` policy that will
   automatically synchronize queues across all cluster nodes.
 
-> `RABBITMQ_SETUP_DELAY` is used here to make sure different nodes are
-  trying to join cluster and setup other things in different times.
+> `RABBITMQ_SETUP_DELAY` (in seconds) is used here to make sure setup process
+> starts when RabbitMQ server had started (typically a small value, like 5
+> seconds).
 
 ## Configuring persistence layer
 
@@ -183,12 +218,15 @@ $ docker service create \
     -e RABBITMQ_SETUP_DELAY=15 \
     -e RABBITMQ_USER=admin \
     -e RABBITMQ_PASSWORD=adminpwd \
-    -e RABBITMQ_CLUSTER_NODES='rabbit@rabbit-2 rabbit@rabbit-3' \
+    -e RABBITMQ_CLUSTER_NODES='rabbit@rabbit-1 rabbit@rabbit-2 rabbit@rabbit-3' \
+    -e RABBITMQ_CLUSTER_PARTITION_HANDLING=autoheal \
+    -e RABBITMQ_CLUSTER_DISC_RAM=disc \
     -e RABBITMQ_NODENAME=rabbit@rabbit-1 \
     -e RABBITMQ_ERLANG_COOKIE=a-little-secret \
     -e RABBITMQ_FIREHOSE_QUEUENAME=trace \
     -e RABBITMQ_FIREHOSE_ROUTINGKEY=publish.# \
-    kuznero/rabbitmq:management-cluster
+    -e RABBITMQ_HIPE_COMPILE=true \
+    kuznero/rabbitmq:3.6.10-mancluster
 
 $ docker service create \
     --name rabbit-2 \
@@ -198,12 +236,15 @@ $ docker service create \
     -e RABBITMQ_SETUP_DELAY=10 \
     -e RABBITMQ_USER=admin \
     -e RABBITMQ_PASSWORD=adminpwd \
-    -e RABBITMQ_CLUSTER_NODES='rabbit@rabbit-1 rabbit@rabbit-3' \
+    -e RABBITMQ_CLUSTER_NODES='rabbit@rabbit-1 rabbit@rabbit-2 rabbit@rabbit-3' \
+    -e RABBITMQ_CLUSTER_PARTITION_HANDLING=autoheal \
+    -e RABBITMQ_CLUSTER_DISC_RAM=disc \
     -e RABBITMQ_NODENAME=rabbit@rabbit-2 \
     -e RABBITMQ_ERLANG_COOKIE=a-little-secret \
     -e RABBITMQ_FIREHOSE_QUEUENAME=trace \
     -e RABBITMQ_FIREHOSE_ROUTINGKEY=publish.# \
-    kuznero/rabbitmq:management-cluster
+    -e RABBITMQ_HIPE_COMPILE=true \
+    kuznero/rabbitmq:3.6.10-mancluster
 
 $ docker service create \
     --name rabbit-3 \
@@ -213,15 +254,20 @@ $ docker service create \
     -e RABBITMQ_SETUP_DELAY=5 \
     -e RABBITMQ_USER=admin \
     -e RABBITMQ_PASSWORD=adminpwd \
-    -e RABBITMQ_CLUSTER_NODES='rabbit@rabbit-1 rabbit@rabbit-2' \
+    -e RABBITMQ_CLUSTER_NODES='rabbit@rabbit-1 rabbit@rabbit-2 rabbit@rabbit-3' \
+    -e RABBITMQ_CLUSTER_PARTITION_HANDLING=autoheal \
+    -e RABBITMQ_CLUSTER_DISC_RAM=disc \
     -e RABBITMQ_NODENAME=rabbit@rabbit-3 \
     -e RABBITMQ_ERLANG_COOKIE=a-little-secret \
     -e RABBITMQ_FIREHOSE_QUEUENAME=trace \
     -e RABBITMQ_FIREHOSE_ROUTINGKEY=publish.# \
-    kuznero/rabbitmq:management-cluster
+    -e RABBITMQ_HIPE_COMPILE=true \
+    kuznero/rabbitmq:3.6.10-mancluster
 ```
 
 > This will start 3 different services (single replica services).
+
+> This setup will reliably reconnect restarted node into a cluster!
 
 ## Considerations for delivery pipeline for RabbitMQ cluster
 

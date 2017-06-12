@@ -1,4 +1,4 @@
-FROM rabbitmq:management
+FROM rabbitmq:3.6.10-management
 
 COPY rabbitmq.config /etc/rabbitmq/rabbitmq.config
 RUN chmod 777 /etc/rabbitmq/rabbitmq.config
@@ -11,6 +11,8 @@ ENV RABBITMQ_CLUSTER_PARTITION_HANDLING=autoheal
 ENV RABBITMQ_CLUSTER_DISC_RAM=disc
 ENV RABBITMQ_FIREHOSE_QUEUENAME=
 ENV RABBITMQ_FIREHOSE_ROUTINGKEY=publish.#
+ENV RABBITMQ_HIPE_COMPILE=false
+ENV RABBITMQ_NODENAME=
 
 RUN apt-get update -y && apt-get install -y python
 
