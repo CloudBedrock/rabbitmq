@@ -116,7 +116,7 @@ part of our image):
 echo "RABBITMQ_SETUP_DELAY                = ${RABBITMQ_SETUP_DELAY:=5}"
 echo "RABBITMQ_USER                       = ${RABBITMQ_USER:=guest}"
 echo "RABBITMQ_PASSWORD                   = ${RABBITMQ_PASSWORD:=guest}"
-echo "RABBITMQ_LOOPBACK_USERS             = ${RABBITMQ_LOOPBACK_USERS:=guest}"
+echo "RABBITMQ_LOOPBACK_USERS             = RABBITMQ_LOOPBACK_USERS"
 echo "RABBITMQ_CLUSTER_NODES              = $RABBITMQ_CLUSTER_NODES"
 echo "RABBITMQ_CLUSTER_PARTITION_HANDLING = ${RABBITMQ_CLUSTER_PARTITION_HANDLING:=autoheal}"
 echo "RABBITMQ_CLUSTER_DISC_RAM           = ${RABBITMQ_CLUSTER_DISC_RAM:=disc}"
@@ -179,8 +179,6 @@ echo "<< RabbitMQ.config >>>"
 > `RABBITMQ_SETUP_DELAY` (in seconds) is used here to make sure setup process
 > starts when RabbitMQ server had started (typically a small value, like 5
 > seconds).
-
-> The default value of loopback users is `guest`.
 
 ## Configuring persistence layer
 
