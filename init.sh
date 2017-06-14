@@ -49,11 +49,11 @@ echo "<< RabbitMQ.config >>>"
     ln -s $(find -iname rabbitmqadmin | head -1) /rabbitmqadmin
     chmod +x /rabbitmqadmin
     echo -n "Declaring '$RABBITMQ_FIREHOSE_QUEUENAME' queue ... "
-    ./rabbitmqadmin declare queue name=$RABBITMQ_FIREHOSE_QUEUENAME
-    ./rabbitmqadmin list queues
+    ./rabbitmqadmin --username=$RABBITMQ_USER --password=$RABBITMQ_PASSWORD declare queue name=$RABBITMQ_FIREHOSE_QUEUENAME
+    ./rabbitmqadmin --username=$RABBITMQ_USER --password=$RABBITMQ_PASSWORD list queues
     echo -n "Declaring binding from 'amq.rabbitmq.trace' to '$RABBITMQ_FIREHOSE_QUEUENAME' with '$RABBITMQ_FIREHOSE_ROUTINGKEY' routing key ... "
-    ./rabbitmqadmin declare binding source=amq.rabbitmq.trace destination=$RABBITMQ_FIREHOSE_QUEUENAME routing_key=$RABBITMQ_FIREHOSE_ROUTINGKEY
-    ./rabbitmqadmin list bindings
+    ./rabbitmqadmin --username=$RABBITMQ_USER --password=$RABBITMQ_PASSWORD declare binding source=amq.rabbitmq.trace destination=$RABBITMQ_FIREHOSE_QUEUENAME routing_key=$RABBITMQ_FIREHOSE_ROUTINGKEY
+    ./rabbitmqadmin --username=$RABBITMQ_USER --password=$RABBITMQ_PASSWORD list bindings
     rabbitmqctl trace_on
     echo "<< Enabling Firehose ... DONE >>>"
   fi
